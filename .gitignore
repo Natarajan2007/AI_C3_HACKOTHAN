@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+
+# VSCode settings (optional)
+.vscode/
+
+# Python Environment Variables
+*.env
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Cache or temp files
+*.swp
+*.swo
+*.bak
+
+# IDE specific files
+.idea/
+
+# Node Modules (if using for frontend later)
+node_modules/
+
+# Ignore compiled files in specific folders
+agents/__pycache__/
+services/__pycache__/
+models/__pycache__/

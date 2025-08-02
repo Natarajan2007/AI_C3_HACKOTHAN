@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Negotiation System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤝 AI Negotiation System</h1>
+            <p>Watch two AI agents negotiate in real-time</p>
+        </header>
+
+        <div class="setup-panel" id="setupPanel">
+            <h2>🛍️ Setup Negotiation</h2>
+            <div class="form-group">
+                <label>Item:</label>
+                <input type="text" id="item" placeholder="e.g., Premium Coffee Beans" value="Premium Ethiopian Coffee Beans">
+            </div>
+            
+            <div class="form-group">
+                <label>Item Details:</label>
+                <textarea id="itemDetails" placeholder="Describe the item's quality and features">Premium single-origin Ethiopian coffee beans, organic certified, perfectly roasted, 1kg bag</textarea>
+            </div>
+            
+            <div class="pricing-section">
+                <h3>💰 Seller Parameters</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Cost Price ($):</label>
+                        <input type="number" id="sellerCost" value="25" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Target Price ($):</label>
+                        <input type="number" id="sellerTarget" value="50" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Minimum Price ($):</label>
+                        <input type="number" id="sellerMin" value="35" step="0.01">
+                    </div>
+                </div>
+                
+                <h3>🛒 Buyer Parameters</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Target Price ($):</label>
+                        <input type="number" id="buyerTarget" value="30" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Maximum Budget ($):</label>
+                        <input type="number" id="buyerMax" value="45" step="0.01">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="startNegotiation()" class="btn-primary">🚀 Start Negotiation</button>
+                <button onclick="autoNegotiate()" class="btn-secondary">⚡ Auto Negotiate</button>
+            </div>
+        </div>
+
+        <div class="negotiation-panel" id="negotiationPanel" style="display:none;">
+            <div class="agents-info">
+                <div class="agent seller-agent">
+                    <h3>👩‍💼 Maria the Seller</h3>
+                    <p>Professional & Value-focused</p>
+                    <div class="agent-status" id="sellerStatus">Waiting...</div>
+                </div>
+                
+                <div class="vs-indicator">VS</div>
+                
+                <div class="agent buyer-agent">
+                    <h3>👨‍💼 Alex the Buyer</h3>
+                    <p>The Smooth Diplomat</p>
+                    <div class="agent-status" id="buyerStatus">Waiting...</div>
+                </div>
+            </div>
+            
+            <div class="conversation-area">
+                <div class="messages" id="messages"></div>
+                <div class="controls">
+                    <button onclick="nextRound()" class="btn-action" id="nextRoundBtn">Next Round</button>
+                    <button onclick="resetNegotiation()" class="btn-secondary">Reset</button>
+                </div>
+            </div>
+            
+            <div class="status-panel">
+                <div class="negotiation-stats">
+                    <div class="stat">
+                        <label>Round:</label>
+                        <span id="currentRound">0</span>
+                    </div>
+                    <div class="stat">
+                        <label>Status:</label>
+                        <span id="negotiationStatus">Setup</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let negotiationActive = false;
+        let currentRound = 0;
+
+        // Socket event handlers
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+
+        socket.on('negotiation_update', function(data) {
+            displayMessage(data.speaker, data.message);
+            updateNegotiationStatus(data);
+        });
+
+        function startNegotiation() {
+            const data = {
+                item: document.getElementById('item').value,
+                item_details: document.getElementById('itemDetails').value,
+                seller_cost: document.getElementById('sellerCost').value,
+                seller_target: document.getElementById('sellerTarget').value,
+                seller_min: document.getElementById('sellerMin').value,
+                buyer_target: document.getElementById('buyerTarget').value,
+                buyer_max: document.getElementById('buyerMax').value
+            };
+
+            fetch('/api/start_negotiation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    document.getElementById('setupPanel').style.display = 'none';
+                    document.getElementById('negotiationPanel').style.display = 'block';
+                    displayMessage('seller', result.message);
+                    negotiationActive = true;
+                    document.getElementById('negotiationStatus').textContent = 'Active';
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            });
+        }
+
+        function nextRound() {
+            if (!negotiationActive) return;
+
+            // Buyer responds first
+            fetch('/api/buyer_respond', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    displayMessage('buyer', result.message);
+                    currentRound = result.round;
+                    document.getElementById('currentRound').textContent = currentRound;
+                    
+                    // Then seller responds
+                    setTimeout(() => {
+                        fetch('/api/seller_respond', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({})
+                        })
+                        .then(response => response.json())
+                        .then(sellerResult => {
+                            if (sellerResult.success) {
+                                displayMessage('seller', sellerResult.message);
+                                
+                                if (sellerResult.deal_concluded) {
+                                    negotiationActive = false;
+                                    document.getElementById('negotiationStatus').textContent = 'Completed';
+                                    document.getElementById('nextRoundBtn').style.display = 'none';
+                                    
+                                    if (sellerResult.final_price) {
+                                        displayMessage('system', `🎉 Deal concluded at $${sellerResult.final_price}!`);
+                                    }
+                                }
+                            }
+                        });
+                    }, 2000);
+                }
+            });
+        }
+
+        function autoNegotiate() {
+            fetch('/api/auto_negotiate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ rounds: 5 })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    document.getElementById('setupPanel').style.display = 'none';
+                    document.getElementById('negotiationPanel').style.display = 'block';
+                    
+                    // Display all negotiation rounds
+                    result.results.forEach((round, index) => {
+                        setTimeout(() => {
+                            displayMessage(round.speaker, round.message);
+                            if (round.deal_concluded) {
+                                negotiationActive = false;
+                                document.getElementById('negotiationStatus').textContent = 'Completed';
+                            }
+                        }, index * 3000);
+                    });
+                }
+            });
+        }
+
+        function displayMessage(speaker, message) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${speaker}-message`;
+            
+            const speakerName = speaker === 'seller' ? '👩‍💼 Maria' : 
+                              speaker === 'buyer' ? '👨‍💼 Alex' : '🤖 System';
+            
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <strong>${speakerName}</strong>
+                    <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div class="message-content">${message}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function resetNegotiation() {
+            document.getElementById('setupPanel').style.display = 'block';
+            document.getElementById('negotiationPanel').style.display = 'none';
+            document.getElementById('messages').innerHTML = '';
+            negotiationActive = false;
+            currentRound = 0;
+            document.getElementById('currentRound').textContent = '0';
+            document.getElementById('negotiationStatus').textContent = 'Setup';
+            document.getElementById('nextRoundBtn').style.display = 'block';
+        }
+
+        function updateNegotiationStatus(data) {
+            if (data.round) {
+                document.getElementById('currentRound').textContent = data.round;
+            }
+        }
+    </script>
+</body>
+</html>
